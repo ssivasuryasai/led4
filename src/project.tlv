@@ -21,7 +21,7 @@
    //-------------------------------------------------------
    
    var(in_fpga, 1)   /// 1 to include the demo board. (Note: Logic will be under /fpga_pins/fpga.)
-   var(debounce_inputs, 1)         /// 1: Provide synchronization and debouncing on all input signals.
+   var(debounce_inputs, 0)         /// 1: Provide synchronization and debouncing on all input signals.
                                    /// 0: Don't provide synchronization and debouncing.
                                    /// m5_if_defined_as(MAKERCHIP, 1, 0, 1): Debounce unless in Makerchip.
    
@@ -32,39 +32,29 @@
    // If debouncing, a user's module is within a wrapper, so it has a different name.
    var(user_module_name, m5_if(m5_debounce_inputs, my_design, m5_my_design))
    var(debounce_cnt, m5_if_defined_as(MAKERCHIP, 1, 8'h03, 8'hff))
-
 \SV
    // Include Tiny Tapeout Lab.
    m4_include_lib(['https:/']['/raw.githubusercontent.com/os-fpga/Virtual-FPGA-Lab/5744600215af09224b7235479be84c30c6e50cb7/tlv_lib/tiny_tapeout_lib.tlv'])
-
-
 \TLV my_design()
    $reset = *ui_in[0] ;
-   $speed4[31:0] = 32'd500000;
-   $speed3[31:0] = 32'd1000000;
-   $speed2[31:0] = 32'd5000000;
-   $speed1[31:0] = 32'd10000000;
-   
-   
-   $count_speed4[31:0] = (>>1$reset || >>1$count_speed4 == $speed4 ) ? 32'b0 : >>1$count_speed4 +1 ;
-   $clk_pulse4 = >>1$reset ? 1'b0: $count_speed4 == $speed4 ? ~>>1$clk_pulse4 : >>1$clk_pulse4 ;
-   
-   $count_speed3[31:0] = (>>1$reset || >>1$count_speed3 == $speed3 ) ? 32'b0 : >>1$count_speed3 +1 ;
-   $clk_pulse3 = >>1$reset ? 1'b0: $count_speed3 == $speed3 ? ~>>1$clk_pulse3 : >>1$clk_pulse3 ;
-   
-   $count_speed2[31:0] = (>>1$reset || >>1$count_speed2 == $speed2 ) ? 32'b0 : >>1$count_speed2 +1 ;
-   $clk_pulse2 = >>1$reset ? 1'b0: $count_speed2 == $speed2 ? ~>>1$clk_pulse2 : >>1$clk_pulse2 ;
-   
-   $count_speed1[31:0] = (>>1$reset || >>1$count_speed1 == $speed1 ) ? 32'b0 : >>1$count_speed1 +1 ;
-   $clk_pulse1 = >>1$reset ? 1'b0: $count_speed1 == $speed1 ? ~>>1$clk_pulse1 : >>1$clk_pulse1 ;
-   
-   
-   
-   
-   
+
+   $count[31:0] = (>>1$reset || >>1$count == 32'd1000000 ) ? 32'b0 : >>1$count +1 ;
+   $clk_pulse = >>1$reset ? 1'b0: $count == 32'd1000000 ? ~>>1$clk_pulse : >>1$clk_pulse ;
+
    $led_output[7:0] = >>1$reset ? 8'b1: 
-                (!>>2$speed_choose && >>1$speed_choose) ? 
-                  >>1$forward ?
+                (!>>1$clk_pulse && $clk_pulse) ? 
+
+    
+          
+            
+    
+
+          
+          Expand Down
+    
+    
+  
+                  $forward ?
                      >>1$led_output[7:0] << 1:  // Shift left 
                      //default 
                      >>1$led_output[7:0] >> 1 // Shift right
@@ -72,25 +62,13 @@
                   
    $forward = $reset ? 1'b1 :  // forward is right to left when == 1'b1
               
-               ($right_edge  && $led_output <= 8'd8)
+               ($right_edge  && >>1$led_output < 8'd8)
                   ? 1'b1
-               :  ($left_edge  && $led_output > 8'd8)
+               :  ($left_edge  && >>1$led_output > 8'd8)
                   ? 1'b0
                   //default
                   : >>1$forward;
-   $speed_choose = $reset ? 1'b0 :  
-              
-               ($right_edge || $left_edge)  && ($led_output == 8'd80 || $led_output == 8'd01)
-                  ? $clk_pulse4
-               :  ($right_edge || $left_edge)  && ($led_output == 8'd40 || $led_output == 8'd02)
-                  ? $clk_pulse3
-               :  ($right_edge || $left_edge)  && ($led_output == 8'd20 || $led_output == 8'd04)
-                  ? $clk_pulse2
-               :  ($right_edge || $left_edge)  && ($led_output == 8'd10 || $led_output == 8'd08)
-                  ? $clk_pulse1
-                  //default
-                  : >>1$speed_choose;
-   
+               
                   
    $left_btn = *ui_in[3];
    $left_edge = (!>>1$left_btn && $left_btn) ;
@@ -105,7 +83,6 @@
    //*uo_out = 8'b0;
    m5_if_neq(m5_target, FPGA, ['*uio_out = 8'b0;'])
    m5_if_neq(m5_target, FPGA, ['*uio_oe = 8'b0;'])
-
 // Set up the Tiny Tapeout lab environment.
 \TLV tt_lab()
    // Connect Tiny Tapeout I/Os to Virtual FPGA Lab.
@@ -114,14 +91,11 @@
    m5+board(/top, /fpga, 7, $, , my_design)
    // Label the switch inputs [0..7] (1..8 on the physical switch panel) (top-to-bottom).
    m5+tt_input_labels_viz(['"UNUSED", "UNUSED", "UNUSED", "UNUSED", "UNUSED", "UNUSED", "UNUSED", "UNUSED"'])
-
 \SV
-
 // ================================================
 // A simple Makerchip Verilog test bench driving random stimulus.
 // Modify the module contents to your needs.
 // ================================================
-
 module top(input logic clk, input logic reset, input logic [31:0] cyc_cnt, output logic passed, output logic failed);
    // Tiny tapeout I/O signals.
    logic [7:0] ui_in, uo_out;
@@ -146,25 +120,18 @@ module top(input logic clk, input logic reset, input logic [31:0] cyc_cnt, outpu
       // ...etc.
    end
    */
-
    // Instantiate the Tiny Tapeout module.
    m5_user_module_name tt(.*);
    
    assign passed = top.cyc_cnt > 80;
    assign failed = 1'b0;
 endmodule
-
-
 // Provide a wrapper module to debounce input signals if requested.
 m5_if(m5_debounce_inputs, ['m5_tt_top(m5_my_design)'])
 \SV
-
-
-
 // =======================
 // The Tiny Tapeout module
 // =======================
-
 module m5_user_module_name (
     input  wire [7:0] ui_in,    // Dedicated inputs - connected to the input switches
     output wire [7:0] uo_out,   // Dedicated outputs - connected to the 7 segment display
@@ -178,14 +145,11 @@ module m5_user_module_name (
     input  wire       rst_n     // reset_n - low to reset
 );
    wire reset = ! rst_n;
-
    // List all potentially-unused inputs to prevent warnings
    wire _unused = &{ena, clk, rst_n, 1'b0};
-
 \TLV
    /* verilator lint_off UNOPTFLAT */
    m5_if(m5_in_fpga, ['m5+tt_lab()'], ['m5+my_design()'])
-
 \SV_plus
    
    // ==========================================
@@ -193,6 +157,5 @@ module m5_user_module_name (
    // your Verilog logic goes here.
    // Note, output assignments are in my_design.
    // ==========================================
-
 \SV
 endmodule
